@@ -1,80 +1,54 @@
 import pandas as pd
-import numpy as np
 import plotly.graph_objs as go
-import plotly.colors
-from collections import OrderedDict
-#import requests
 
+# TODO: Scroll down to line 157 and set up a fifth visualization for the data dashboard
 
-# default list of all countries of interest
-country_default = OrderedDict([('Canada', 'CAN'), ('United States', 'USA'), 
-  ('Brazil', 'BRA'), ('France', 'FRA'), ('India', 'IND'), ('Italy', 'ITA'), 
-  ('Germany', 'DEU'), ('United Kingdom', 'GBR'), ('China', 'CHN'), ('Japan', 'JPN')])
-
-
-def return_figures(countries=country_default):
-  """Creates four plotly visualizations using the World Bank API
-  # Example of the World Bank API endpoint:
-  # arable land for the United States and Brazil from 1990 to 2015
-  # http://api.worldbank.org/v2/countries/usa;bra/indicators/AG.LND.ARBL.HA?date=1990:2015&per_page=1000&format=json
+def cleandata(dataset, keepcolumns = ['Country Name', '1990', '2015'], value_variables = ['1990', '2015']):
+    """Clean world bank data for a visualizaiton dashboard
+    Keeps data range of dates in keep_columns variable and data for the top 10 economies
+    Reorients the columns into a year, country and value
+    Saves the results to a csv file
     Args:
-        country_default (dict): list of countries for filtering the data
+        dataset (str): name of the csv data file
+    Returns:
+        None
+    """    
+    df = pd.read_csv(dataset, skiprows=4)
+
+    # Keep only the columns of interest (years and country name)
+    df = df[keepcolumns]
+
+    top10country = ['United States', 'China', 'Japan', 'Germany', 'United Kingdom', 'India', 'France', 'Brazil', 'Italy', 'Canada']
+    df = df[df['Country Name'].isin(top10country)]
+
+    # melt year columns  and convert year to date time
+    df_melt = df.melt(id_vars='Country Name', value_vars = value_variables)
+    df_melt.columns = ['country','year', 'variable']
+    df_melt['year'] = df_melt['year'].astype('datetime64[ns]').dt.year
+
+    # output clean csv file
+    return df_melt
+
+def return_figures():
+    """Creates four plotly visualizations
+    Args:
+        None
     Returns:
         list (dict): list containing the four plotly visualizations
-  """
+    """
 
-  # when the countries variable is empty, use the country_default dictionary
-  if not bool(countries):
-    countries = country_default
-
-  # prepare filter data for World Bank API
-  # the API uses ISO-3 country codes separated by ;
-  country_filter = list(countries.values())
-  country_filter = [x.lower() for x in country_filter]
-  country_filter = ';'.join(country_filter)
-
-  # World Bank indicators of interest for pulling data
-  indicators = ['AG.LND.ARBL.HA.PC', 'SP.RUR.TOTL.ZS', 'SP.RUR.TOTL.ZS', 'AG.LND.FRST.ZS']
-
-  data_frames = [] # stores the data frames with the indicator data of interest
-  urls = [] # url endpoints for the World Bank API
-
-  # pull data from World Bank API and clean the resulting json
-  # results stored in data_frames variable
-  for indicator in indicators:
-    url = 'http://api.worldbank.org/v2/countries/' + country_filter +\
-    '/indicators/' + indicator + '?date=1990:2015&per_page=1000&format=json'
-    urls.append(url)
-
-    try:
-      r = requests.get(url)
-      data = r.json()[1]
-    except:
-      print('could not load data ', indicator)
-
-    for i, value in enumerate(data):
-      value['indicator'] = value['indicator']['value']
-      value['country'] = value['country']['value']
-
-    data_frames.append(data)
-  
   # first chart plots arable land from 1990 to 2015 in top 10 economies 
   # as a line chart
-  graph_one = []
-  df_one = pd.DataFrame(data_frames[0])
-
-  # filter and sort values for the visualization
-  # filtering plots the countries in decreasing order by their values
-  df_one = df_one[(df_one['date'] == '2015') | (df_one['date'] == '1990')]
-  df_one.sort_values('value', ascending=False, inplace=True)
-
-  # this  country list is re-used by all the charts to ensure legends have the same
-  # order and color
-  countrylist = df_one.country.unique().tolist()
-  
-  for country in countrylist:
-      x_val = df_one[df_one['country'] == country].date.tolist()
-      y_val =  df_one[df_one['country'] == country].value.tolist()
+    
+    graph_one = []
+    df = cleandata('data/API_AG.LND.ARBL.HA.PC_DS2_en_csv_v2.csv')
+    df.columns = ['country','year','hectaresarablelandperperson']
+    df.sort_values('hectaresarablelandperperson', ascending=False, inplace=True)
+    countrylist = df.country.unique().tolist()
+    
+    for country in countrylist:
+      x_val = df[df['country'] == country].year.tolist()
+      y_val =  df[df['country'] == country].hectaresarablelandperperson.tolist()
       graph_one.append(
           go.Scatter(
           x = x_val,
@@ -84,38 +58,40 @@ def return_figures(countries=country_default):
           )
       )
 
-  layout_one = dict(title = 'Change in Hectares Arable Land <br> per Person 1990 to 2015',
+    layout_one = dict(title = 'Change in Hectares Arable Land <br> per Person 1990 to 2015',
                 xaxis = dict(title = 'Year',
                   autotick=False, tick0=1990, dtick=25),
                 yaxis = dict(title = 'Hectares'),
                 )
 
-  # second chart plots ararble land for 2015 as a bar chart
-  graph_two = []
-  df_one.sort_values('value', ascending=False, inplace=True)
-  df_one = df_one[df_one['date'] == '2015'] 
+# second chart plots ararble land for 2015 as a bar chart    
+    graph_two = []
+    df = cleandata('data/API_AG.LND.ARBL.HA.PC_DS2_en_csv_v2.csv')
+    df.columns = ['country','year','hectaresarablelandperperson']
+    df.sort_values('hectaresarablelandperperson', ascending=False, inplace=True)
+    df = df[df['year'] == 2015] 
 
-  graph_two.append(
+    graph_two.append(
       go.Bar(
-      x = df_one.country.tolist(),
-      y = df_one.value.tolist(),
+      x = df.country.tolist(),
+      y = df.hectaresarablelandperperson.tolist(),
       )
-  )
+    )
 
-  layout_two = dict(title = 'Hectares Arable Land per Person in 2015',
+    layout_two = dict(title = 'Hectares Arable Land per Person in 2015',
                 xaxis = dict(title = 'Country',),
                 yaxis = dict(title = 'Hectares per person'),
                 )
 
-  # third chart plots percent of population that is rural from 1990 to 2015
-  graph_three = []
-  df_three = pd.DataFrame(data_frames[1])
-  df_three = df_three[(df_three['date'] == '2015') | (df_three['date'] == '1990')]
 
-  df_three.sort_values('value', ascending=False, inplace=True)
-  for country in countrylist:
-      x_val = df_three[df_three['country'] == country].date.tolist()
-      y_val =  df_three[df_three['country'] == country].value.tolist()
+# third chart plots percent of population that is rural from 1990 to 2015
+    graph_three = []
+    df = cleandata('data/API_SP.RUR.TOTL.ZS_DS2_en_csv_v2_9948275.csv')
+    df.columns = ['country', 'year', 'percentrural']
+    df.sort_values('percentrural', ascending=False, inplace=True)
+    for country in countrylist:
+      x_val = df[df['country'] == country].year.tolist()
+      y_val =  df[df['country'] == country].percentrural.tolist()
       graph_three.append(
           go.Scatter(
           x = x_val,
@@ -125,60 +101,76 @@ def return_figures(countries=country_default):
           )
       )
 
-  layout_three = dict(title = 'Change in Rural Population <br> (Percent of Total Population)',
+    layout_three = dict(title = 'Change in Rural Population <br> (Percent of Total Population)',
                 xaxis = dict(title = 'Year',
                   autotick=False, tick0=1990, dtick=25),
                 yaxis = dict(title = 'Percent'),
                 )
+    
+# fourth chart shows rural population vs arable land
+    graph_four = []
+    
+    valuevariables = [str(x) for x in range(1995, 2016)]
+    keepcolumns = [str(x) for x in range(1995, 2016)]
+    keepcolumns.insert(0, 'Country Name')
 
-  # fourth chart shows rural population vs arable land as percents
-  graph_four = []
-  df_four_a = pd.DataFrame(data_frames[2])
-  df_four_a = df_four_a[['country', 'date', 'value']]
-  
-  df_four_b = pd.DataFrame(data_frames[3])
-  df_four_b = df_four_b[['country', 'date', 'value']]
+    df_one = cleandata('data/API_SP.RUR.TOTL_DS2_en_csv_v2_9914824.csv', keepcolumns, valuevariables)
+    df_two = cleandata('data/API_AG.LND.FRST.K2_DS2_en_csv_v2_9910393.csv', keepcolumns, valuevariables)
+    
+    df_one.columns = ['country', 'year', 'variable']
+    df_two.columns = ['country', 'year', 'variable']
+    
+    df = df_one.merge(df_two, on=['country', 'year'])
 
-  df_four = df_four_a.merge(df_four_b, on=['country', 'date'])
-  df_four.sort_values('date', ascending=True, inplace=True)
-
-  plotly_default_colors = plotly.colors.DEFAULT_PLOTLY_COLORS
-
-  for i, country in enumerate(countrylist):
-
-      current_color = []
-
-      x_val = df_four[df_four['country'] == country].value_x.tolist()
-      y_val = df_four[df_four['country'] == country].value_y.tolist()
-      years = df_four[df_four['country'] == country].date.tolist()
-      country_label = df_four[df_four['country'] == country].country.tolist()
+    for country in countrylist:
+      x_val = df[df['country'] == country].variable_x.tolist()
+      y_val = df[df['country'] == country].variable_y.tolist()
+      year = df[df['country'] == country].year.tolist()
+      country_label = df[df['country'] == country].country.tolist()
 
       text = []
-      for country, year in zip(country_label, years):
+      for country, year in zip(country_label, year):
           text.append(str(country) + ' ' + str(year))
 
       graph_four.append(
           go.Scatter(
           x = x_val,
           y = y_val,
-          mode = 'lines+markers',
+          mode = 'markers',
           text = text,
           name = country,
           textposition = 'top'
           )
       )
 
-  layout_four = dict(title = '% of Population that is Rural versus <br> % of Land that is Forested <br> 1990-2015',
-                xaxis = dict(title = '% Population that is Rural', range=[0,100], dtick=10),
-                yaxis = dict(title = '% of Area that is Forested', range=[0,100], dtick=10),
+    layout_four = dict(title = 'Rural Population versus <br> Forested Area (Square Km) 1990-2015',
+                xaxis = dict(title = 'Rural Population'),
+                yaxis = dict(title = 'Forest Area (square km)'),
                 )
+    
+    graph_five = []
+    df_five = cleandata('data/API_SP.RUR.TOTL_DS2_en_csv_v2_9914824.csv', ['Country Name', '2015'], ['2015'])
 
+    df_five.columns = ['country','year','ruralpopulation']
+    df_five.sort_values('ruralpopulation', ascending=False, inplace=True) 
 
-  # append all charts
-  figures = []
-  figures.append(dict(data=graph_one, layout=layout_one))
-  figures.append(dict(data=graph_two, layout=layout_two))
-  figures.append(dict(data=graph_three, layout=layout_three))
-  figures.append(dict(data=graph_four, layout=layout_four))
+    graph_five.append(
+      go.Bar(
+      x = df_five.country.tolist(),
+      y = df_five.ruralpopulation.tolist(),
+      )
+    )
 
-  return figures
+    layout_five = dict(title = 'Rural Population in 2015',
+                xaxis = dict(title = 'Country',),
+                yaxis = dict(title = 'Rural Population'))
+    
+    # append all charts to the figures list
+    figures = []
+    figures.append(dict(data=graph_one, layout=layout_one))
+    figures.append(dict(data=graph_two, layout=layout_two))
+    figures.append(dict(data=graph_three, layout=layout_three))
+    figures.append(dict(data=graph_four, layout=layout_four))
+    figures.append(dict(data=graph_five, layout=layout_five))
+
+    return figures
