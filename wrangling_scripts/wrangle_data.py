@@ -3,7 +3,7 @@ import numpy as np
 import plotly.graph_objs as go
 import plotly.colors
 from collections import OrderedDict
-import requests
+#import requests
 
 
 # default list of all countries of interest
